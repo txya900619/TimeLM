@@ -1,15 +1,15 @@
+import os
+from glob import glob
 from typing import Any, Dict, Optional, Tuple
 
+import sentencepiece as spm
 import torch
 from lightning import LightningDataModule
+from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import ConcatDataset, DataLoader, Dataset, random_split
 from torchvision.datasets import MNIST
 from torchvision.transforms import transforms
-import sentencepiece as spm
 
-from torch.nn.utils.rnn import pad_sequence
-from glob import glob
-import os
 
 def collate_fn(batch):
     tokens_bos_list = []
@@ -22,37 +22,46 @@ def collate_fn(batch):
         pad_sequence(tokens_eos_list, batch_first=True),
     )
 
+
 class LDCDataset(Dataset):
-    def __init__(self, data_paths:str, tokenizer_model_path:str):
-        tokenizer = spm.SentencePieceProcessor(
-            model_file=tokenizer_model_path
-        )
+    def __init__(self, data_paths: str, tokenizer_model_path: str):
+        tokenizer = spm.SentencePieceProcessor(model_file=tokenizer_model_path)
         transcriptions = []
 
         for data_path in data_paths:
-            with open(data_path, "r", encoding="utf-8") as data:
+            with open(data_path, encoding="utf-8") as data:
                 transcriptions += data.readlines()
                 data.close()
 
-        tokens_list = [tokenizer.EncodeAsIds(transcription.strip()) for transcription in transcriptions]
-        self.lengths = torch.as_tensor([len(tokens)+1 for tokens in tokens_list])
-        self.tokens_bos = pad_sequence([torch.LongTensor([tokenizer.bos_id()] + tokens) for tokens in tokens_list], batch_first=True)
-        self.tokens_eos = pad_sequence([torch.LongTensor(tokens + [tokenizer.eos_id()]) for tokens in tokens_list], batch_first=True)
+        tokens_list = [
+            tokenizer.EncodeAsIds(transcription.strip()) for transcription in transcriptions
+        ]
+        self.lengths = torch.as_tensor([len(tokens) + 1 for tokens in tokens_list])
+        self.tokens_bos = pad_sequence(
+            [torch.LongTensor([tokenizer.bos_id()] + tokens) for tokens in tokens_list],
+            batch_first=True,
+        )
+        self.tokens_eos = pad_sequence(
+            [torch.LongTensor(tokens + [tokenizer.eos_id()]) for tokens in tokens_list],
+            batch_first=True,
+        )
 
     def __len__(self):
         return self.tokens_bos.shape[0]
 
     def __getitem__(self, index):
-        return self._unpack_pad(self.tokens_bos[index], self.lengths[index]), self._unpack_pad(self.tokens_eos[index], self.lengths[index])
+        return self._unpack_pad(self.tokens_bos[index], self.lengths[index]), self._unpack_pad(
+            self.tokens_eos[index], self.lengths[index]
+        )
 
     def _unpack_pad(self, padded: torch.Tensor, length: int):
         max_length = padded.shape[0]
         idx = torch.arange(max_length)
 
-
         mask = idx < length
         unpacked = padded[mask]
         return unpacked
+
 
 class LDCDataModule(LightningDataModule):
     def __init__(
@@ -129,7 +138,6 @@ class LDCDataModule(LightningDataModule):
     def load_state_dict(self, state_dict: Dict[str, Any]) -> None:
         """Things to do when loading checkpoint."""
         pass
-
 
 
 if __name__ == "__main__":
