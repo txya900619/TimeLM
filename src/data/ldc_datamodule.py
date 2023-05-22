@@ -1,7 +1,9 @@
+import json
 import os
 from glob import glob
 from typing import Any, Dict, Optional, Tuple
 
+import numpy as np
 import sentencepiece as spm
 import torch
 from lightning import LightningDataModule
@@ -24,43 +26,34 @@ def collate_fn(batch):
 
 
 class LDCDataset(Dataset):
-    def __init__(self, data_paths: str, tokenizer_model_path: str):
-        tokenizer = spm.SentencePieceProcessor(model_file=tokenizer_model_path)
-        transcriptions = []
+    def __init__(self, json_list_file_path: str, bos: int, eos: int):
+        self.json_list_file_path = json_list_file_path
+        self.bos = bos
+        self.eos = eos
 
-        for data_path in data_paths:
-            with open(data_path, encoding="utf-8") as data:
-                transcriptions += data.readlines()
-                data.close()
-
-        tokens_list = [
-            tokenizer.EncodeAsIds(transcription.strip()) for transcription in transcriptions
-        ]
-        self.lengths = torch.as_tensor([len(tokens) + 1 for tokens in tokens_list])
-        self.tokens_bos = pad_sequence(
-            [torch.LongTensor([tokenizer.bos_id()] + tokens) for tokens in tokens_list],
-            batch_first=True,
-        )
-        self.tokens_eos = pad_sequence(
-            [torch.LongTensor(tokens + [tokenizer.eos_id()]) for tokens in tokens_list],
-            batch_first=True,
-        )
+        offsets = []
+        with open(json_list_file_path, "rb") as json_list_file:
+            while True:
+                offset = json_list_file.tell()
+                if not json_list_file.readline():
+                    break
+                offsets.append(offset)
+            json_list_file.close()
+        self.offsets = np.array(offsets)
 
     def __len__(self):
-        return self.tokens_bos.shape[0]
+        return self.offsets.size
 
     def __getitem__(self, index):
-        return self._unpack_pad(self.tokens_bos[index], self.lengths[index]), self._unpack_pad(
-            self.tokens_eos[index], self.lengths[index]
-        )
-
-    def _unpack_pad(self, padded: torch.Tensor, length: int):
-        max_length = padded.shape[0]
-        idx = torch.arange(max_length)
-
-        mask = idx < length
-        unpacked = padded[mask]
-        return unpacked
+        offset = self.offsets[index]
+        with open(self.json_list_file_path, encoding="utf-8") as data_file:
+            data_file.seek(offset)
+            transcription = data_file.readline()
+            data_file.close()
+            tokens = json.loads(transcription.strip())
+            tokens_bos = torch.LongTensor([self.bos] + tokens)
+            tokens_eos = torch.LongTensor(tokens + [self.eos])
+            return (tokens_bos, tokens_eos)
 
 
 class LDCDataModule(LightningDataModule):
@@ -84,18 +77,89 @@ class LDCDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
 
+        self.train_json_list_file_path: Optional[str] = None
+        self.valid_json_list_file_path: Optional[str] = None
+        self.test_json_list_file_path: Optional[str] = None
+        self.bos: Optional[int] = None
+        self.eos: Optional[int] = None
+
         self.data_train: Optional[Dataset] = None
         self.data_val: Optional[Dataset] = None
         self.data_test: Optional[Dataset] = None
 
+    def prepare_data(self) -> None:
+        # TODO: Add date information
+        tokenizer = spm.SentencePieceProcessor(model_file=self.tokenizer_model_path)
+        tmp_dir = os.path.join("data", "tmp")
+        tmp_filename = os.path.basename(self.data_folder_path)
+
+        self.train_json_list_file_path = os.path.join(tmp_dir, f"{tmp_filename}_train.txt")
+        self.valid_json_list_file_path = os.path.join(tmp_dir, f"{tmp_filename}_valid.txt")
+        self.test_json_list_file_path = os.path.join(tmp_dir, f"{tmp_filename}_test.txt")
+
+        self.bos = tokenizer.bos_id()
+        self.eos = tokenizer.eos_id()
+
+        if not os.path.exists(tmp_dir):
+            os.makedirs(tmp_dir)
+
+        if os.path.exists(self.train_json_list_file_path):
+            return
+
+        data_paths = glob(os.path.join(self.data_folder_path, "*.txt"))
+        train_tokens_json_list = []
+        valid_tokens_json_list = []
+        test_tokens_json_list = []
+
+        for data_path in data_paths:
+            with open(data_path, encoding="utf-8") as data:
+                for line in data.readlines():
+                    rand = np.random.rand()
+                    if rand <= self.train_val_test_split[0]:
+                        train_tokens_json_list.append(
+                            json.dumps(tokenizer.EncodeAsIds(line.strip()))
+                        )
+                    elif rand <= self.train_val_test_split[0] + self.train_val_test_split[1]:
+                        valid_tokens_json_list.append(
+                            json.dumps(tokenizer.EncodeAsIds(line.strip()))
+                        )
+                    else:
+                        test_tokens_json_list.append(
+                            json.dumps(tokenizer.EncodeAsIds(line.strip()))
+                        )
+                data.close()
+
+        with open(self.train_json_list_file_path, "w", encoding="utf-8") as train_json_list_file:
+            train_json_list_file.write("\n".join(train_tokens_json_list))
+            train_json_list_file.close()
+
+        with open(self.valid_json_list_file_path, "w", encoding="utf-8") as valid_json_list_file:
+            valid_json_list_file.write("\n".join(valid_tokens_json_list))
+            valid_json_list_file.close()
+
+        with open(self.test_json_list_file_path, "w", encoding="utf-8") as test_json_list_file:
+            test_json_list_file.write("\n".join(test_tokens_json_list))
+            test_json_list_file.close()
+
     def setup(self, stage: str) -> None:
         if not self.data_train and not self.data_val and not self.data_test:
-            data_paths = glob(os.path.join(self.data_folder_path, "*.txt"))
-
-            self.data_train, self.data_val, self.data_test = random_split(
-                LDCDataset(data_paths, self.tokenizer_model_path),
-                lengths=[int(len(data_paths) * split) for split in self.train_val_test_split],
+            self.train_json_list_file_path = os.path.join(
+                "data", "tmp", f"{os.path.basename(self.data_folder_path)}_train.txt"
             )
+            self.valid_json_list_file_path = os.path.join(
+                "data", "tmp", f"{os.path.basename(self.data_folder_path)}_valid.txt"
+            )
+            self.test_json_list_file_path = os.path.join(
+                "data", "tmp", f"{os.path.basename(self.data_folder_path)}_test.txt"
+            )
+
+            tokenizer = spm.SentencePieceProcessor(model_file=self.tokenizer_model_path)
+            self.bos = tokenizer.bos_id()
+            self.eos = tokenizer.eos_id()
+
+            self.data_train = LDCDataset(self.train_json_list_file_path, self.bos, self.eos)
+            self.data_val = LDCDataset(self.valid_json_list_file_path, self.bos, self.eos)
+            self.data_test = LDCDataset(self.test_json_list_file_path, self.bos, self.eos)
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
