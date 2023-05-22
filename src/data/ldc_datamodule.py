@@ -77,9 +77,15 @@ class LDCDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.pin_memory = pin_memory
 
-        self.train_json_list_file_path: Optional[str] = None
-        self.valid_json_list_file_path: Optional[str] = None
-        self.test_json_list_file_path: Optional[str] = None
+        self.train_json_list_file_path = os.path.join(
+            "data/tmp", f"{os.path.basename(self.data_folder_path)}_train.txt"
+        )
+        self.valid_json_list_file_path = os.path.join(
+            "data/tmp", f"{os.path.basename(self.data_folder_path)}_valid.txt"
+        )
+        self.test_json_list_file_path = os.path.join(
+            "data/tmp", f"{os.path.basename(self.data_folder_path)}_test.txt"
+        )
         self.bos: Optional[int] = None
         self.eos: Optional[int] = None
 
@@ -91,11 +97,6 @@ class LDCDataModule(LightningDataModule):
         # TODO: Add date information
         tokenizer = spm.SentencePieceProcessor(model_file=self.tokenizer_model_path)
         tmp_dir = os.path.join("data", "tmp")
-        tmp_filename = os.path.basename(self.data_folder_path)
-
-        self.train_json_list_file_path = os.path.join(tmp_dir, f"{tmp_filename}_train.txt")
-        self.valid_json_list_file_path = os.path.join(tmp_dir, f"{tmp_filename}_valid.txt")
-        self.test_json_list_file_path = os.path.join(tmp_dir, f"{tmp_filename}_test.txt")
 
         self.bos = tokenizer.bos_id()
         self.eos = tokenizer.eos_id()
@@ -143,16 +144,6 @@ class LDCDataModule(LightningDataModule):
 
     def setup(self, stage: str) -> None:
         if not self.data_train and not self.data_val and not self.data_test:
-            self.train_json_list_file_path = os.path.join(
-                "data", "tmp", f"{os.path.basename(self.data_folder_path)}_train.txt"
-            )
-            self.valid_json_list_file_path = os.path.join(
-                "data", "tmp", f"{os.path.basename(self.data_folder_path)}_valid.txt"
-            )
-            self.test_json_list_file_path = os.path.join(
-                "data", "tmp", f"{os.path.basename(self.data_folder_path)}_test.txt"
-            )
-
             tokenizer = spm.SentencePieceProcessor(model_file=self.tokenizer_model_path)
             self.bos = tokenizer.bos_id()
             self.eos = tokenizer.eos_id()
