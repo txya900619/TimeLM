@@ -9,7 +9,6 @@ class RNNLM(nn.Module):
         dropout=0.2,
         rnn_neurons=1024,
         rnn_layers=2,
-        rnn_re_init=False,
         dnn_neurons=256,
     ):
         super().__init__()
