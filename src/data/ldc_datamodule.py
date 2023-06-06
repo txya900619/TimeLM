@@ -1,16 +1,15 @@
 import json
 import os
+import random
 from glob import glob
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import sentencepiece as spm
 import torch
 from lightning import LightningDataModule
 from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import ConcatDataset, DataLoader, Dataset, random_split
-from torchvision.datasets import MNIST
-from torchvision.transforms import transforms
+from torch.utils.data import DataLoader, Dataset, random_split
 
 
 def collate_fn(batch):
@@ -48,9 +47,9 @@ class LDCDataset(Dataset):
         offset = self.offsets[index]
         with open(self.json_list_file_path, encoding="utf-8") as data_file:
             data_file.seek(offset)
-            transcription = data_file.readline()
+            json_string = data_file.readline()
             data_file.close()
-            tokens = json.loads(transcription.strip())
+            _, tokens = json.loads(json_string.strip())  # _ is date string ex. 19910101
             tokens_bos = torch.LongTensor([self.bos] + tokens)
             tokens_eos = torch.LongTensor(tokens + [self.eos])
             return (tokens_bos, tokens_eos)
@@ -113,21 +112,16 @@ class LDCDataModule(LightningDataModule):
         test_tokens_json_list = []
 
         for data_path in data_paths:
+            date = os.path.splitext(os.path.basename(data_path))[0]
             with open(data_path, encoding="utf-8") as data:
                 for line in data.readlines():
-                    rand = np.random.rand()
-                    if rand <= self.train_val_test_split[0]:
-                        train_tokens_json_list.append(
-                            json.dumps(tokenizer.EncodeAsIds(line.strip()))
-                        )
-                    elif rand <= self.train_val_test_split[0] + self.train_val_test_split[1]:
-                        valid_tokens_json_list.append(
-                            json.dumps(tokenizer.EncodeAsIds(line.strip()))
-                        )
-                    else:
-                        test_tokens_json_list.append(
-                            json.dumps(tokenizer.EncodeAsIds(line.strip()))
-                        )
+                    rand_tokens_json_list: List[Any] = random.choices(  # nosec
+                        [train_tokens_json_list, valid_tokens_json_list, test_tokens_json_list],
+                        weights=self.train_val_test_split,
+                    )[0]
+                    rand_tokens_json_list.append(
+                        json.dumps([date, tokenizer.EncodeAsIds(line.strip())])
+                    )
                 data.close()
 
         with open(self.train_json_list_file_path, "w", encoding="utf-8") as train_json_list_file:

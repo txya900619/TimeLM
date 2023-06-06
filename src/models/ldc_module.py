@@ -57,7 +57,15 @@ class LDCLitModule(LightningModule):
         self.val_loss_best.reset()
 
     def model_step(self, batch: Any):
-        x, y = batch
+        if len(batch) == 2:
+            x, y = batch
+        elif len(batch) == 3:
+            x, y, date_tokens = batch
+            x = (x, date_tokens)
+        elif len(batch) == 5:
+            x, y, year_tokens, month_tokens, day_tokens = batch
+            x = (x, year_tokens, month_tokens, day_tokens)
+
         logits = self.forward(x)
         loss = self.criterion(logits.permute(0, 2, 1), y)
         preds = torch.argmax(logits, dim=1)
