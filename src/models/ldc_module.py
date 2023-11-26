@@ -116,14 +116,18 @@ class LDCLitModule(LightningModule):
             https://lightning.ai/docs/pytorch/latest/common/lightning_module.html#configure-optimizers
         """
         optimizer = self.hparams.optimizer(params=self.parameters())
+
         if self.hparams.scheduler is not None:
             scheduler = self.hparams.scheduler(optimizer=optimizer)
+            interval = "epoch"
+            if isinstance(scheduler, torch.optim.lr_scheduler.LambdaLR):
+                interval = "step"
             return {
                 "optimizer": optimizer,
                 "lr_scheduler": {
                     "scheduler": scheduler,
                     "monitor": "val/loss",
-                    "interval": "epoch",
+                    "interval": interval,
                     "frequency": 1,
                 },
             }

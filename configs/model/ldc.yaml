@@ -1,3 +1,8 @@
+defaults:
+  - net: rnnlm.yaml
+  - scheduler: reduce_lr_on_plateau.yaml
+  - _self_
+
 _target_: src.models.ldc_module.LDCLitModule
 
 optimizer:
@@ -5,20 +10,3 @@ optimizer:
   _partial_: true
   lr: 0.001
   weight_decay: 0.0
-
-scheduler:
-  _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
-  _partial_: true
-  mode: min
-  factor: 0.8
-  patience: 0
-  threshold: 0.0025
-
-net:
-  _target_: src.models.components.rnnlm.RNNLM
-  output_neurons: 8000
-  embedding_dim: 128
-  dropout: 0.2
-  rnn_neurons: 1024
-  rnn_layers: 2
-  dnn_neurons: 256
