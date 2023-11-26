@@ -2,10 +2,10 @@
 
 defaults:
   - _self_
-  - data: mnist # choose datamodule with `test_dataloader()` for evaluation
-  - model: mnist
+  - data: ldc_cna # choose datamodule with `test_dataloader()` for evaluation
+  - model: ldc
   - logger: null
-  - trainer: default
+  - trainer: gpu
   - paths: default
   - extras: default
   - hydra: default
@@ -13,6 +13,10 @@ defaults:
 task_name: "eval"
 
 tags: ["dev"]
+
+data:
+  batch_size: 512
+  tokenizer_model_path: /mnt/md1/user_wayne/TimeLM/tokenizer/ldc_cna_char_8000.model
 
 # passing checkpoint path is necessary for evaluation
 ckpt_path: ???

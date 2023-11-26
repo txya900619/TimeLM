@@ -31,17 +31,11 @@ trainer:
 model:
   net:
     _target_: src.models.components.three_emb_rnnlm.ThreeEmbRNNLM
-    output_neurons: 8000
     year_dim: 128
     month_dim: 128
     day_dim: 128
-    embedding_dim: 128
     num_date_embeddings: 7306
     num_year_embeddings: 51
-    dropout: 0.2
-    rnn_neurons: 1024
-    rnn_layers: 2
-    dnn_neurons: 256
     nhead: 4
 
 data:

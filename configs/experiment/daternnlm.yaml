@@ -31,14 +31,8 @@ trainer:
 model:
   net:
     _target_: src.models.components.daternnlm.DateRNNLM
-    output_neurons: 8000
     context_dim: 384
-    embedding_dim: 128
     num_date_embeddings: 7306
-    dropout: 0.2
-    rnn_neurons: 1024
-    rnn_layers: 2
-    dnn_neurons: 256
     nhead: 4
 
 data:
