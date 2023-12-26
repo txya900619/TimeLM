@@ -32,6 +32,9 @@ trainer:
 data:
   batch_size: 512
   tokenizer_model_path: /mnt/md1/user_wayne/TimeLM/tokenizer/ldc_cna_char_8000.model
+  glob_match_string: "*.txt"
+  tmp_dir: data/tmp
+  per_artical: False
 
 logger:
   wandb:

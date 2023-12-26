@@ -60,6 +60,9 @@ class LDCDataModule(LightningDataModule):
         self,
         data_folder_path: str,
         tokenizer_model_path: str,
+        glob_match_string: str,
+        tmp_dir: str,
+        per_artical: bool = False,
         train_val_test_split: Tuple[float, float, float] = [0.8, 0.1, 0.1],
         batch_size: int = 64,
         num_workers: int = 0,
@@ -71,19 +74,22 @@ class LDCDataModule(LightningDataModule):
 
         self.data_folder_path = data_folder_path
         self.tokenizer_model_path = tokenizer_model_path
+        self.glob_match_string = glob_match_string
+        self.tmp_dir = tmp_dir
+        self.per_artical = per_artical
         self.train_val_test_split = train_val_test_split
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
 
         self.train_json_list_file_path = os.path.join(
-            "data/tmp", f"{os.path.basename(self.data_folder_path)}_train.txt"
+            self.tmp_dir, f"{os.path.basename(self.data_folder_path)}_train.txt"
         )
         self.valid_json_list_file_path = os.path.join(
-            "data/tmp", f"{os.path.basename(self.data_folder_path)}_valid.txt"
+            self.tmp_dir, f"{os.path.basename(self.data_folder_path)}_valid.txt"
         )
         self.test_json_list_file_path = os.path.join(
-            "data/tmp", f"{os.path.basename(self.data_folder_path)}_test.txt"
+            self.tmp_dir, f"{os.path.basename(self.data_folder_path)}_test.txt"
         )
         self.bos: Optional[int] = None
         self.eos: Optional[int] = None
@@ -95,30 +101,39 @@ class LDCDataModule(LightningDataModule):
     def prepare_data(self) -> None:
         # TODO: Add date information
         tokenizer = spm.SentencePieceProcessor(model_file=self.tokenizer_model_path)
-        tmp_dir = os.path.join("data", "tmp")
 
         self.bos = tokenizer.bos_id()
         self.eos = tokenizer.eos_id()
 
-        if not os.path.exists(tmp_dir):
-            os.makedirs(tmp_dir)
+        if not os.path.exists(self.tmp_dir):
+            os.makedirs(self.tmp_dir)
 
         if os.path.exists(self.train_json_list_file_path):
             return
 
-        data_paths = glob(os.path.join(self.data_folder_path, "*.txt"))
+        data_paths = glob(os.path.join(self.data_folder_path, self.glob_match_string))
         train_tokens_json_list = []
         valid_tokens_json_list = []
         test_tokens_json_list = []
 
         for data_path in data_paths:
             date = os.path.splitext(os.path.basename(data_path))[0]
+            if self.per_artical:
+                rand_tokens_json_list: List[Any] = random.choices(  # nosec
+                    [train_tokens_json_list, valid_tokens_json_list, test_tokens_json_list],
+                    weights=self.train_val_test_split,
+                )[0]
             with open(data_path, encoding="utf-8") as data:
                 for line in data.readlines():
-                    rand_tokens_json_list: List[Any] = random.choices(  # nosec
-                        [train_tokens_json_list, valid_tokens_json_list, test_tokens_json_list],
-                        weights=self.train_val_test_split,
-                    )[0]
+                    if not self.per_artical:
+                        rand_tokens_json_list: List[Any] = random.choices(  # nosec
+                            [
+                                train_tokens_json_list,
+                                valid_tokens_json_list,
+                                test_tokens_json_list,
+                            ],
+                            weights=self.train_val_test_split,
+                        )[0]
                     rand_tokens_json_list.append(
                         json.dumps([date, tokenizer.EncodeAsIds(line.strip())])
                     )
