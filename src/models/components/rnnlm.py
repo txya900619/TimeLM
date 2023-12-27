@@ -9,7 +9,7 @@ class RNNLM(nn.Module):
         dropout=0.2,
         rnn_neurons=1024,
         rnn_layers=2,
-        dnn_neurons=256,
+        # dnn_neurons=256,
     ):
         super().__init__()
 
@@ -22,13 +22,13 @@ class RNNLM(nn.Module):
             dropout=dropout,
             batch_first=True,
         )
-        self.dnn = nn.Sequential(
-            nn.Linear(rnn_neurons, dnn_neurons),
-            nn.LayerNorm(dnn_neurons),
-            nn.LeakyReLU(),
-            nn.Dropout(p=dropout),
-        )
-        self.out = nn.Linear(dnn_neurons, output_neurons)
+        # self.dnn = nn.Sequential(
+        #     nn.Linear(rnn_neurons, dnn_neurons),
+        #     nn.LayerNorm(dnn_neurons),
+        #     nn.LeakyReLU(),
+        #     nn.Dropout(p=dropout),
+        # )
+        self.out = nn.Linear(rnn_neurons, output_neurons)
         self.reshape = False
 
     def forward(self, x: Tensor, hx=None) -> Tensor:
@@ -39,7 +39,7 @@ class RNNLM(nn.Module):
             self.reshape = True
 
         x, _ = self.rnn(x, hx)
-        x = self.dnn(x)
+        # x = self.dnn(x)
         out = self.out(x)
 
         if self.reshape:

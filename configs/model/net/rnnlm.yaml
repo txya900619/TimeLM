@@ -1,7 +1,6 @@
 _target_: src.models.components.rnnlm.RNNLM
 output_neurons: 8000
-embedding_dim: 128
+embedding_dim: 650
 dropout: 0.2
-rnn_neurons: 1024
+rnn_neurons: 650
 rnn_layers: 2
-dnn_neurons: 256
