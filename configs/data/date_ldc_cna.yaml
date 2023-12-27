@@ -1,7 +1,6 @@
-_target_: src.data.date_ldc_datamodule.DateLDCDataModule
-data_folder_path: ${paths.ldc_cna}
-tokenizer_model_path: ???
-batch_size: 512
-train_val_test_split: [0.8, 0.1, 0.1]
-num_workers: 8
-pin_memory: False
+defaults:
+  - default
+
+dataset_class:
+  _target_: src.data.components.date_ldc_dataset.DateLDCDataset
+  _partial_: true

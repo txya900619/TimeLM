@@ -4,55 +4,9 @@ import random
 from glob import glob
 from typing import Any, Dict, List, Optional, Tuple
 
-import numpy as np
 import sentencepiece as spm
-import torch
 from lightning import LightningDataModule
-from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import DataLoader, Dataset, random_split
-
-
-def collate_fn(batch):
-    tokens_bos_list = []
-    tokens_eos_list = []
-    for tokens_bos, tokens_eos in batch:
-        tokens_bos_list.append(tokens_bos)
-        tokens_eos_list.append(tokens_eos)
-    return (
-        pad_sequence(tokens_bos_list, batch_first=True),
-        pad_sequence(tokens_eos_list, batch_first=True),
-    )
-
-
-class LDCDataset(Dataset):
-    def __init__(self, json_list_file_path: str, bos: int, eos: int):
-        self.json_list_file_path = json_list_file_path
-        self.bos = bos
-        self.eos = eos
-
-        offsets = []
-        with open(json_list_file_path, "rb") as json_list_file:
-            while True:
-                offset = json_list_file.tell()
-                if not json_list_file.readline():
-                    break
-                offsets.append(offset)
-            json_list_file.close()
-        self.offsets = np.array(offsets)
-
-    def __len__(self):
-        return self.offsets.size
-
-    def __getitem__(self, index):
-        offset = self.offsets[index]
-        with open(self.json_list_file_path, encoding="utf-8") as data_file:
-            data_file.seek(offset)
-            json_string = data_file.readline()
-            data_file.close()
-            _, tokens = json.loads(json_string.strip())  # _ is date string ex. 19910101
-            tokens_bos = torch.LongTensor([self.bos] + tokens)
-            tokens_eos = torch.LongTensor(tokens + [self.eos])
-            return (tokens_bos, tokens_eos)
+from torch.utils.data import DataLoader, Dataset
 
 
 class LDCDataModule(LightningDataModule):
@@ -62,6 +16,7 @@ class LDCDataModule(LightningDataModule):
         tokenizer_model_path: str,
         glob_match_string: str,
         tmp_dir: str,
+        dataset_class: type[Dataset],
         per_artical: bool = False,
         train_val_test_split: Tuple[float, float, float] = [0.8, 0.1, 0.1],
         batch_size: int = 64,
@@ -76,6 +31,7 @@ class LDCDataModule(LightningDataModule):
         self.tokenizer_model_path = tokenizer_model_path
         self.glob_match_string = glob_match_string
         self.tmp_dir = tmp_dir
+        self.dataset_class = dataset_class
         self.per_artical = per_artical
         self.train_val_test_split = train_val_test_split
         self.batch_size = batch_size
@@ -93,7 +49,6 @@ class LDCDataModule(LightningDataModule):
         )
         self.bos: Optional[int] = None
         self.eos: Optional[int] = None
-
         self.data_train: Optional[Dataset] = None
         self.data_val: Optional[Dataset] = None
         self.data_test: Optional[Dataset] = None
@@ -120,7 +75,11 @@ class LDCDataModule(LightningDataModule):
             date = os.path.splitext(os.path.basename(data_path))[0]
             if self.per_artical:
                 rand_tokens_json_list: List[Any] = random.choices(  # nosec
-                    [train_tokens_json_list, valid_tokens_json_list, test_tokens_json_list],
+                    [
+                        train_tokens_json_list,
+                        valid_tokens_json_list,
+                        test_tokens_json_list,
+                    ],
                     weights=self.train_val_test_split,
                 )[0]
             with open(data_path, encoding="utf-8") as data:
@@ -157,9 +116,11 @@ class LDCDataModule(LightningDataModule):
             self.bos = tokenizer.bos_id()
             self.eos = tokenizer.eos_id()
 
-            self.data_train = LDCDataset(self.train_json_list_file_path, self.bos, self.eos)
-            self.data_val = LDCDataset(self.valid_json_list_file_path, self.bos, self.eos)
-            self.data_test = LDCDataset(self.test_json_list_file_path, self.bos, self.eos)
+            self.data_train = self.dataset_class(
+                self.train_json_list_file_path, self.bos, self.eos
+            )
+            self.data_val = self.dataset_class(self.valid_json_list_file_path, self.bos, self.eos)
+            self.data_test = self.dataset_class(self.test_json_list_file_path, self.bos, self.eos)
 
     def train_dataloader(self) -> DataLoader:
         return DataLoader(
@@ -168,7 +129,7 @@ class LDCDataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             shuffle=True,
-            collate_fn=collate_fn,
+            collate_fn=self.data_train.collate_fn,
         )
 
     def val_dataloader(self) -> DataLoader:
@@ -178,7 +139,7 @@ class LDCDataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             shuffle=False,
-            collate_fn=collate_fn,
+            collate_fn=self.data_val.collate_fn,
         )
 
     def test_dataloader(self) -> DataLoader:
@@ -188,7 +149,7 @@ class LDCDataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             shuffle=False,
-            collate_fn=collate_fn,
+            collate_fn=self.data_test.collate_fn,
         )
 
     def teardown(self, stage: Optional[str] = None) -> None:
