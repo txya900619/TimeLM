@@ -2,6 +2,7 @@ from typing import Any
 
 import torch
 from lightning import LightningModule
+from torch import Tensor
 from torchmetrics import MeanMetric, MinMetric
 
 
@@ -35,7 +36,9 @@ class LDCLitModule(LightningModule):
         self.net = net
 
         # loss function
-        self.criterion = torch.nn.CrossEntropyLoss(ignore_index=0)
+        self.criterion = torch.nn.CrossEntropyLoss(
+            ignore_index=0, reduction="none"
+        )  # TODO: change to have sample weight, current is mean
 
         # metric objects for calculating and averaging accuracy across batches
 
@@ -57,17 +60,26 @@ class LDCLitModule(LightningModule):
         self.val_loss_best.reset()
 
     def model_step(self, batch: Any):
+        loss_weights = None
         if len(batch) == 2:
             x, y = batch
         elif len(batch) == 3:
             x, y, date_tokens = batch
+            x = (x, date_tokens)
+        elif len(batch) == 4:
+            x, y, date_tokens, loss_weights = batch
             x = (x, date_tokens)
         elif len(batch) == 5:
             x, y, year_tokens, month_tokens, day_tokens = batch
             x = (x, year_tokens, month_tokens, day_tokens)
 
         logits = self.forward(x)
-        loss = self.criterion(logits.permute(0, 2, 1), y)
+        loss: Tensor = self.criterion(logits.permute(0, 2, 1), y)
+
+        if loss_weights is not None:
+            torch.einsum("bt,b -> bt", loss, loss_weights)
+        loss = loss.sum() / (y != 0).sum()
+
         preds = torch.argmax(logits, dim=1)
         return loss, preds, y
 
