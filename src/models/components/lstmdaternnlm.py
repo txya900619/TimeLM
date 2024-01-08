@@ -23,7 +23,7 @@ class LSTMEmbedding(nn.Module):
                 look_ahead = torch.max(x).item() - 1
 
             hx = None
-            if self.use_older_history:
+            if self.use_older_history and torch.max(x).item() > (look_ahead + 1):
                 with torch.no_grad():
                     x_old = x.repeat(1, torch.max(x).item() - look_ahead - 1)
                     x_old = (
