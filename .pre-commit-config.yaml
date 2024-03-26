@@ -18,11 +18,11 @@ repos:
       - id: check-added-large-files
 
   # python code formatting
-  - repo: https://github.com/psf/black
-    rev: 24.3.0
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.3.4
     hooks:
-      - id: black
-        args: [--line-length, "99"]
+      - id: ruff
+      - id: ruff-format
 
   # python import sorting
   - repo: https://github.com/PyCQA/isort
