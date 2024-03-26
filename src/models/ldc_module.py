@@ -2,6 +2,7 @@ from typing import Any
 
 import torch
 from lightning import LightningModule
+from lightning.pytorch.utilities import grad_norm
 from torch import Tensor
 from torchmetrics import MeanMetric, MinMetric
 
@@ -119,6 +120,10 @@ class LDCLitModule(LightningModule):
 
     def on_test_epoch_end(self):
         pass
+
+    def on_before_optimizer_step(self, optimizer):
+        # inspect (unscaled) gradients here
+        self.log_dict(grad_norm(self, norm_type=2))
 
     def configure_optimizers(self):
         """Choose what optimizers and learning-rate schedulers to use in your optimization.
