@@ -1,12 +1,14 @@
 defaults:
-  - net: rnnlm.yaml
-  - scheduler: reduce_lr_on_plateau.yaml
+  - net: rnnlm
+  - scheduler: cosine_schedule_with_warmup
   - _self_
 
 _target_: src.models.ldc_module.LDCLitModule
 
 optimizer:
-  _target_: torch.optim.Adam
+  _target_: torch.optim.AdamW
   _partial_: true
   lr: 0.001
-  weight_decay: 0.0
+  betas: [0.9, 0.98]
+  eps: 0.000000001
+  weight_decay: 0.01

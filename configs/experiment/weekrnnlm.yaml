@@ -4,10 +4,10 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: week_ldc_cna.yaml
-  - override /model: ldc.yaml
-  - override /callbacks: default.yaml
-  - override /trainer: ddp.yaml
+  - override /data: week_ldc_cna
+  - override /model: ldc
+  - override /callbacks: default
+  - override /trainer: ddp
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
