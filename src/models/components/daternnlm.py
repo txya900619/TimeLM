@@ -53,12 +53,13 @@ class DateRNNLM(nn.Module):
         dropout=0.15,
         rnn_layers=2,
         rnn_neurons=1024,
-        dnn_neurons=256,
+        # dnn_neurons=256,
         nhead=6,
+        without_d_atten=False,
     ):
         super().__init__()
         self.embedding = nn.Embedding(output_neurons, embedding_dim, padding_idx=0)
-        self.date_embedding = nn.Embedding(num_date_embeddings, context_dim)
+        self.date_embedding = nn.Embedding(num_date_embeddings, context_dim, padding_idx=0)
         self.dropout = nn.Dropout(p=dropout)
         self.rnn = nn.LSTM(
             input_size=embedding_dim + context_dim,
@@ -67,21 +68,24 @@ class DateRNNLM(nn.Module):
             dropout=dropout,
             batch_first=True,
         )
-        self.d_atten = nn.MultiheadAttention(
-            embed_dim=context_dim,
-            num_heads=nhead,
-            dropout=dropout,
-            kdim=embedding_dim,
-            vdim=embedding_dim,
-            batch_first=True,
-        )
-        self.dnn = nn.Sequential(
-            nn.Linear(rnn_neurons, dnn_neurons),
-            nn.LayerNorm(dnn_neurons),
-            nn.LeakyReLU(),
-            nn.Dropout(p=dropout),
-        )
-        self.out = nn.Linear(dnn_neurons, output_neurons)
+
+        self.d_atten = None
+        if not without_d_atten:
+            self.d_atten = nn.MultiheadAttention(
+                embed_dim=context_dim,
+                num_heads=nhead,
+                dropout=dropout,
+                kdim=embedding_dim,
+                vdim=embedding_dim,
+                batch_first=True,
+            )
+        # self.dnn = nn.Sequential(
+        #     nn.Linear(rnn_neurons, dnn_neurons),
+        #     nn.LayerNorm(dnn_neurons),
+        #     nn.LeakyReLU(),
+        #     nn.Dropout(p=dropout),
+        # )
+        self.out = nn.Linear(rnn_neurons, output_neurons)
         self.reshape = False
 
     def forward(self, x: Tuple[Tensor, Tensor], hx=None) -> Tensor:
@@ -89,6 +93,7 @@ class DateRNNLM(nn.Module):
         src_mask, src_key_padding_mask = make_masks(src)  # (B,T), (B,T)
         src = self.embedding(src)  # (B,T,E)
         src = self.dropout(src)
+
         date_contexts = self.date_embedding(date_contexts)
         if len(date_contexts.shape) != 2:
             date_contexts = date_contexts.mean(-2)  # or mean (B, context_dim)
@@ -102,14 +107,19 @@ class DateRNNLM(nn.Module):
         date_contexts = date_contexts.unsqueeze(1)  # (B,1,context_dim)
         date_contexts = date_contexts.repeat(1, src.shape[1], 1)  # (B,T,context_dim)
 
-        date_contexts, _ = self.d_atten(
-            date_contexts, src, src, attn_mask=src_mask, key_padding_mask=src_key_padding_mask
-        )
+        if self.d_atten is not None:
+            date_contexts, _ = self.d_atten(
+                date_contexts,
+                src,
+                src,
+                attn_mask=src_mask,
+                key_padding_mask=src_key_padding_mask,
+            )
 
         src = torch.cat([src, date_contexts], dim=-1)  # (B,T,E+context_dim)
 
         src, _ = self.rnn(src, hx)
-        src = self.dnn(src)
+        # src = self.dnn(src)
         out: Tensor = self.out(src)
 
         if self.reshape:

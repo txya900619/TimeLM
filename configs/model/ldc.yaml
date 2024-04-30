@@ -8,7 +8,7 @@ _target_: src.models.ldc_module.LDCLitModule
 optimizer:
   _target_: torch.optim.AdamW
   _partial_: true
-  lr: 0.001
+  lr: 0.004
   betas: [0.9, 0.98]
   eps: 0.000000001
   weight_decay: 0.01

@@ -1,4 +1,4 @@
 _target_: transformers.get_cosine_schedule_with_warmup
 _partial_: true
-num_warmup_steps: 25000
-num_training_steps: 1543549
+num_warmup_steps: 162510 # 15% of 1083400
+num_training_steps: 1083400 # 100 epochs

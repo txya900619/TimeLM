@@ -7,11 +7,19 @@ from src.models.components.masks import make_masks
 
 
 class LSTMEmbedding(nn.Module):
-    def __init__(self, num_date_embeddings, context_dim, look_ahead=7, use_older_history=False):
+    def __init__(
+        self,
+        num_date_embeddings,
+        context_dim,
+        look_ahead=7,
+        use_older_history=False,
+        dropout=0.15,
+    ):
         super().__init__()
         self.emb = nn.Embedding(num_date_embeddings, context_dim, padding_idx=0)
         self.look_ahead = look_ahead
-        self.lstm = nn.LSTM(context_dim, context_dim, batch_first=True)
+        self.dropout = nn.Dropout(p=dropout)
+        self.lstm = nn.LSTM(context_dim, context_dim, batch_first=True, dropout=dropout)
         self.use_older_history = use_older_history
         self.num_date_embeddings = num_date_embeddings
 
@@ -34,6 +42,7 @@ class LSTMEmbedding(nn.Module):
                     )
                     x_old = x_old.clamp(min=0)
                     x_old = self.emb(x_old)
+                    x_old = self.dropout(x_old)
                     _, hx = self.lstm(x_old)
 
             x = x.repeat(1, look_ahead + 1)  # (B, look_ahead)
@@ -41,6 +50,7 @@ class LSTMEmbedding(nn.Module):
             x = x.clamp(min=0)  # (B, look_ahead)
 
             x = self.emb(x)  # (B, look_ahead, context_dim)
+            x = self.dropout(x)
             old, now = torch.split(
                 x, (look_ahead, 1), dim=1
             )  # (B, look_ahead-1, context_dim), (B, 1, context_dim)
@@ -99,7 +109,7 @@ class DateRNNLM(nn.Module):
         dropout=0.15,
         rnn_layers=2,
         rnn_neurons=1024,
-        dnn_neurons=256,
+        # dnn_neurons=256,
         nhead=6,
         look_ahead=7,
         use_older_history=False,
@@ -111,6 +121,7 @@ class DateRNNLM(nn.Module):
             context_dim,
             look_ahead=look_ahead,
             use_older_history=use_older_history,
+            dropout=dropout,
         )
         self.dropout = nn.Dropout(p=dropout)
         self.rnn = nn.LSTM(
