@@ -1,0 +1,7 @@
+defaults:
+  - default
+
+date_text: true
+dataset_class:
+  _target_: src.data.components.date_text_ldc_dataset.DateTextLDCDataset
+  _partial_: true

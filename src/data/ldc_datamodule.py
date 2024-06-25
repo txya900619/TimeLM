@@ -8,6 +8,8 @@ import sentencepiece as spm
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
 
+from src.data.components.date_text_ldc_dataset import DateTextLDCDataset
+
 
 class LDCDataModule(LightningDataModule):
     def __init__(
@@ -19,6 +21,7 @@ class LDCDataModule(LightningDataModule):
         dataset_class: type[Dataset],
         per_artical: bool = False,
         train_val_test_split: Tuple[float, float, float] = [0.8, 0.1, 0.1],
+        date_text: bool = False,
         batch_size: int = 64,
         num_workers: int = 0,
         pin_memory: bool = False,
@@ -37,6 +40,7 @@ class LDCDataModule(LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
+        self.date_text = date_text
 
         self.train_json_list_file_path = os.path.join(
             self.tmp_dir, f"{os.path.basename(self.data_folder_path)}_train.txt"
@@ -73,6 +77,10 @@ class LDCDataModule(LightningDataModule):
 
         for data_path in data_paths:
             date = os.path.splitext(os.path.basename(data_path))[0]
+            if self.date_text:
+                num_to_han = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"]
+                date = "".join([num_to_han[int(d)] for d in date])
+                date = tokenizer.EncodeAsIds(date.strip())[1:]
             if self.per_artical:
                 rand_tokens_json_list: List[Any] = random.choices(  # nosec
                     [
