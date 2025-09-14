@@ -1,0 +1,6 @@
+defaults:
+  - gigaword_nyt_p
+
+dataset_class:
+  _target_: src.data.components.date_ldc_dataset.DateLDCDataset
+  _partial_: true

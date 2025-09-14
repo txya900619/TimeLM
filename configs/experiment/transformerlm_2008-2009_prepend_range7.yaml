@@ -1,0 +1,50 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: date_ldc_cna
+  - override /model: ldc
+  - override /callbacks: default
+  - override /trainer: ddp
+  - override /model/net: transformerlm
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["transformerlm"]
+
+seed: 12345
+
+trainer:
+  min_epochs: 10
+  max_epochs: 60
+  gradient_clip_val: 5.0
+
+model:
+  net:
+    _target_: src.models.components.transformerlm_prepend.TransformerLM
+    num_date_embeddings: 732
+    date_context_range: 7
+    dropout: 0.04
+  optimizer:
+    lr: 0.0002
+#   net:
+#     lin1_size: 128
+#     lin2_size: 256
+#     lin3_size: 64
+
+data:
+  batch_size: 256
+  tokenizer_model_path: /mnt/md1/user_wayne/TimeLM/tokenizer/ldc_cna_char_8000.model
+  glob_match_string: "200[8-9]*.txt"
+  tmp_dir: data/tmp_2008_2009
+  per_artical: False
+  dataset_class:
+    start_date: "20080101"
+
+logger:
+  wandb:
+    tags: ${tags}
+    project: "ldc_cna_2008_2009"

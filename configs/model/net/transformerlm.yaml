@@ -1,0 +1,9 @@
+_target_: src.models.components.transformerlm.TransformerLM
+vocab: 8000
+d_model: 512
+nhead: 16
+num_encoder_layers: 5
+d_ffn: 1536
+dropout: 0.02
+activation: gelu
+normalize_before: False

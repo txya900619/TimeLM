@@ -3,7 +3,7 @@ from typing import Any
 import torch
 from lightning import LightningModule
 from lightning.pytorch.utilities import grad_norm
-from torch import Tensor
+from torch import LongTensor, Tensor
 from torchmetrics import MeanMetric, MinMetric
 
 
@@ -60,7 +60,7 @@ class LDCLitModule(LightningModule):
         self.val_loss.reset()
         self.val_loss_best.reset()
 
-    def model_step(self, batch: Any):
+    def model_step(self, batch: Any, training: bool = False):
         loss_weights = None
         if len(batch) == 2:
             x, y = batch
@@ -68,24 +68,53 @@ class LDCLitModule(LightningModule):
             x, y, date_tokens = batch
             x = (x, date_tokens)
         elif len(batch) == 4:
-            x, y, date_tokens, loss_weights = batch
-            x = (x, date_tokens)
+            x, y, date_tokens, loss_weights_or_date_text_tokens = batch
+
+            if loss_weights_or_date_text_tokens.dtype == torch.long:
+                x = (x, date_tokens, loss_weights_or_date_text_tokens)
+            else:
+                loss_weights = loss_weights_or_date_text_tokens
+                x = (x, date_tokens)
         elif len(batch) == 5:
             x, y, year_tokens, month_tokens, day_tokens = batch
             x = (x, year_tokens, month_tokens, day_tokens)
+        elif len(batch) == 6:
+            x, y, date_tokens, year_tokens, month_tokens, day_tokens = batch
+            x = (x, date_tokens, year_tokens, month_tokens, day_tokens)
 
-        logits = self.forward(x)
+        result = self.forward(x)
+        if isinstance(result, tuple):
+            demb_mask = None
+            if len(result) == 4:
+                logits, ref_demb, pred_demb, demb_mask = result
+            elif len(result) == 3:
+                logits, ref_demb, pred_demb = result
+        else:
+            logits = result
+
         loss: Tensor = self.criterion(logits.permute(0, 2, 1), y)
+        if isinstance(result, tuple) and training:
+            # for mse
+            # demb_loss = torch.nn.functional.mse_loss(pred_demb, ref_demb, reduction="none") * 0.1
 
+            # for cosine similarity
+            demb_loss = (
+                1 - torch.nn.functional.cosine_similarity(pred_demb, ref_demb, dim=1).unsqueeze(1)
+            ) * 0.1
+
+            if demb_mask is not None:
+                demb_loss = demb_loss * demb_mask
+
+            loss = torch.cat([demb_loss, loss], dim=1)
         if loss_weights is not None:
-            torch.einsum("bt,b -> bt", loss, loss_weights)
+            loss = torch.einsum("bt,b -> bt", loss, loss_weights)
         loss = loss.sum() / (y != 0).sum()
 
         preds = torch.argmax(logits, dim=1)
         return loss, preds, y
 
     def training_step(self, batch: Any, batch_idx: int):
-        loss, preds, targets = self.model_step(batch)
+        loss, preds, targets = self.model_step(batch, training=True)
 
         # update and log metrics
         self.train_loss(loss)
@@ -135,7 +164,12 @@ class LDCLitModule(LightningModule):
         optimizer = self.hparams.optimizer(params=self.parameters())
 
         if self.hparams.scheduler is not None:
-            scheduler = self.hparams.scheduler(optimizer=optimizer)
+            stepping_batches = self.trainer.estimated_stepping_batches
+            scheduler = self.hparams.scheduler(
+                optimizer=optimizer,
+                num_warmup_steps=int(stepping_batches * 0.15),
+                num_training_steps=stepping_batches,
+            )
             interval = "epoch"
             if isinstance(scheduler, torch.optim.lr_scheduler.LambdaLR):
                 interval = "step"

@@ -1,10 +1,10 @@
 import json
 import os
-import random
-from glob import glob
-from typing import Any, Dict, List, Optional, Tuple
+import re
+from typing import Any, Dict, Optional
 
 import sentencepiece as spm
+from datasets import load_dataset
 from lightning import LightningDataModule
 from torch.utils.data import DataLoader, Dataset
 
@@ -12,46 +12,40 @@ from torch.utils.data import DataLoader, Dataset
 class LDCDataModule(LightningDataModule):
     def __init__(
         self,
-        data_folder_path: str,
+        dataset_name: str,
         tokenizer_model_path: str,
         glob_match_string: str,
         tmp_dir: str,
         dataset_class: type[Dataset],
-        per_artical: bool = False,
-        train_val_test_split: Tuple[float, float, float] = [0.8, 0.1, 0.1],
         date_text: bool = False,
         batch_size: int = 64,
         num_workers: int = 0,
         pin_memory: bool = False,
-        exclude_glob_match_string: Optional[str] = None,
         test_dataset_class: Optional[type[Dataset]] = None,
     ) -> None:
         super().__init__()
 
         self.save_hyperparameters(logger=False)
 
-        self.data_folder_path = data_folder_path
+        self.dataset_name = dataset_name
         self.tokenizer_model_path = tokenizer_model_path
         self.glob_match_string = glob_match_string
         self.tmp_dir = tmp_dir
         self.dataset_class = dataset_class
         self.test_dataset_class = test_dataset_class
-        self.per_artical = per_artical
-        self.train_val_test_split = train_val_test_split
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.pin_memory = pin_memory
         self.date_text = date_text
-        self.exclude_glob_match_string = exclude_glob_match_string
 
         self.train_json_list_file_path = os.path.join(
-            self.tmp_dir, f"{os.path.basename(self.data_folder_path)}_train.txt"
+            self.tmp_dir, f"{os.path.basename(self.dataset_name)}_train.txt"
         )
         self.valid_json_list_file_path = os.path.join(
-            self.tmp_dir, f"{os.path.basename(self.data_folder_path)}_valid.txt"
+            self.tmp_dir, f"{os.path.basename(self.dataset_name)}_valid.txt"
         )
         self.test_json_list_file_path = os.path.join(
-            self.tmp_dir, f"{os.path.basename(self.data_folder_path)}_test.txt"
+            self.tmp_dir, f"{os.path.basename(self.dataset_name)}_test.txt"
         )
         self.bos: Optional[int] = None
         self.eos: Optional[int] = None
@@ -72,48 +66,35 @@ class LDCDataModule(LightningDataModule):
         if os.path.exists(self.train_json_list_file_path):
             return
 
-        data_paths = glob(os.path.join(self.data_folder_path, self.glob_match_string))
-        exclude_data_paths = (
-            glob(os.path.join(self.data_folder_path, self.exclude_glob_match_string))
-            if self.exclude_glob_match_string
-            else []
+        hf_dataset = load_dataset(self.dataset_name)
+
+        hf_dataset = hf_dataset.filter(
+            lambda x: re.match(self.glob_match_string, x["date"]) is not None
         )
-        data_paths = [d for d in data_paths if d not in exclude_data_paths]
 
         train_tokens_json_list = []
         valid_tokens_json_list = []
         test_tokens_json_list = []
 
-        for data_path in data_paths:
-            date = os.path.splitext(os.path.basename(data_path))[0]
-            if self.date_text:
-                num_to_han = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"]
-                date = "".join([num_to_han[int(d)] for d in date])
-                date = tokenizer.EncodeAsIds(date.strip())[1:]
-            if self.per_artical:
-                rand_tokens_json_list: List[Any] = random.choices(  # nosec
-                    [
-                        train_tokens_json_list,
-                        valid_tokens_json_list,
-                        test_tokens_json_list,
-                    ],
-                    weights=self.train_val_test_split,
-                )[0]
-            with open(data_path, encoding="utf-8") as data:
-                for line in data.readlines():
-                    if not self.per_artical:
-                        rand_tokens_json_list: List[Any] = random.choices(  # nosec
-                            [
-                                train_tokens_json_list,
-                                valid_tokens_json_list,
-                                test_tokens_json_list,
-                            ],
-                            weights=self.train_val_test_split,
-                        )[0]
-                    rand_tokens_json_list.append(
-                        json.dumps([date, tokenizer.EncodeAsIds(line.strip())])
-                    )
-                data.close()
+        for split, dataset in hf_dataset.items():
+            if split == "train":
+                tokens_json_list = train_tokens_json_list
+            elif split == "validation":
+                tokens_json_list = valid_tokens_json_list
+            elif split == "test":
+                tokens_json_list = test_tokens_json_list
+            else:
+                continue
+
+            for item in dataset:
+                date = item["date"]
+                if self.date_text:
+                    num_to_han = ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"]
+                    date = "".join([num_to_han[int(d)] for d in date])
+                    date = tokenizer.EncodeAsIds(date.strip())[1:]
+                tokens_json_list.append(
+                    json.dumps([date, tokenizer.EncodeAsIds(item["text"].strip())])
+                )
 
         with open(self.train_json_list_file_path, "w", encoding="utf-8") as train_json_list_file:
             train_json_list_file.write("\n".join(train_tokens_json_list))

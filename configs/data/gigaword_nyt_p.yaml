@@ -1,0 +1,12 @@
+_target_: src.data.ldc_datamodule_from_hf.LDCDataModule
+dataset_name: "txya900619/gigaword_nyt_p"
+tokenizer_model_path: /mnt/md1/user_wayne/TimeLM/tokenizer/gigaword_nyt_p_bpe_4000.model
+glob_match_string: ???
+tmp_dir: ???
+dataset_class:
+  _target_: src.data.components.ldc_dataset.LDCDataset
+  _partial_: true
+date_text: False
+batch_size: 512
+num_workers: 8
+pin_memory: False
