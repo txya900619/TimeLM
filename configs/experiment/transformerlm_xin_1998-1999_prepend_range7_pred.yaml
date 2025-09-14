@@ -1,0 +1,52 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: date_gigaword_xin_p
+  - override /model: ldc
+  - override /callbacks: default
+  - override /trainer: ddp
+  - override /model/net: transformerlm
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["transformerlm"]
+
+seed: 12345
+
+trainer:
+  min_epochs: 10
+  max_epochs: 60
+  gradient_clip_val: 5.0
+  accumulate_grad_batches: 16
+
+model:
+  net:
+    _target_: src.models.components.transformerlm_prepend_pred_demb.TransformerLM
+    num_date_embeddings: 732
+    date_context_range: 7
+    dropout: 0.15
+    vocab: 7761
+  optimizer:
+    lr: 0.0002
+
+#   net:
+#     lin1_size: 128
+#     lin2_size: 256
+#     lin3_size: 64
+
+data:
+  batch_size: 16
+  tokenizer_model_path: /mnt/md1/user_wayne/TimeLM/tokenizer/gigaword_xin_p_char_7761.model
+  glob_match_string: "199[8-9].+"
+  tmp_dir: data/tmp_1998_1999
+  dataset_class:
+    start_date: "19980101"
+
+logger:
+  wandb:
+    tags: ${tags}
+    project: "gigaword_xin_p_1998_1999"
