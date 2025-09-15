@@ -164,7 +164,7 @@ class TransformerLM(nn.Module):
         self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_encoder_layers)
 
         # test on 1 layer?
-        self.d_embedding_encoder = nn.TransformerEncoder(encoder_layers, 2)
+        self.d_embedding_encoder = nn.TransformerEncoder(encoder_layers, 1)
         self.d_embedding_positional_embedding = nn.Embedding(date_context_range, self.d_embedding)
 
         # reset the params of the transformer model
@@ -195,8 +195,8 @@ class TransformerLM(nn.Module):
         date_contexts_mask, date_contexts_padding_mask = make_masks(date_contexts)
         date_contexts_padding_mask[date_contexts == 0] = False
 
-        src_mask, src_key_padding_mask = make_masks(torch.cat([date_contexts, src], dim=1))
-        src_key_padding_mask[F.pad(date_contexts, (0, src.size(1)), value=1) == 0] = False
+        src_mask, src_key_padding_mask = make_masks(torch.cat([date_contexts[:, -1:], src], dim=1))
+        src_key_padding_mask[F.pad(date_contexts[:, -1:], (0, src.size(1)), value=1) == 0] = False
 
         src = self.custom_src_module(src)
         if self.embedding_proj is not None:
@@ -219,7 +219,7 @@ class TransformerLM(nn.Module):
             is_causal=True,
         )
 
-        src = torch.cat([date_contexts, src], dim=1)
+        src = torch.cat([date_contexts[:, -1:], src], dim=1)
         src = src + self.positional_encoding(src)
         # src = torch.cat([date_contexts, src], dim=1)
 
@@ -227,7 +227,7 @@ class TransformerLM(nn.Module):
             src, mask=src_mask, src_key_padding_mask=src_key_padding_mask, is_causal=True
         )
 
-        encoder_out = encoder_out[:, self.date_context_range :, :]
+        encoder_out = encoder_out[:, 1:, :]
 
         pred = self.output_proj(encoder_out)
 
